@@ -3,161 +3,11 @@ package uaparser
 import (
 	"fmt"
 	"github.com/dlclark/regexp2"
-
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
-
-// "Microsoft Edge";v="131", "Chromium";v="131", "Not_A IBrand";v="24"
-
-func lowerize(str string) string {
-	return strings.ToLower(str)
-}
-
-func majorize(version string) string {
-	return strings.Split(strip(`[^\d\.]`, version), ".")[0]
-}
-
-var (
-	reCache  = make(map[string]*regexp.Regexp)
-	re2Cache = make(map[string]*regexp2.Regexp)
-)
-
-func getRegexp(pattern string) (*regexp.Regexp, error) {
-	if re, exists := reCache[pattern]; exists {
-		return re, nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-	reCache[pattern] = re
-	return re, nil
-}
-
-func getRegexp2(pattern string) (*regexp2.Regexp, error) {
-	if re, exists := re2Cache[pattern]; exists {
-		return re, nil
-	}
-	re := regexp2.MustCompile(pattern, 0)
-	re2Cache[pattern] = re
-	return re, nil
-}
-
-func deepCopyMap(original map[string]string) map[string]string {
-	cy := make(map[string]string)
-	for key, value := range original {
-		cy[key] = value
-	}
-	return cy
-}
-
-func extractIndex(value string) (int, error) {
-	if strings.Contains(value, "$") {
-		re := regexp.MustCompile(`\d+`)
-		match := re.FindString(value)
-		if match != "" {
-			return strconv.Atoi(match)
-		}
-		return 0, fmt.Errorf("no number found after $")
-	}
-	return 0, nil
-}
-
-func applyPattern(ua string, pattern string, output map[string]string) (map[string]string, bool) {
-	processMatches := func(matches []string, output map[string]string) map[string]string {
-		result := deepCopyMap(output)
-		for key, value := range output {
-			if idx, err := extractIndex(value); err == nil && idx > 0 && idx < len(matches) {
-				re := regexp.MustCompile(`\$\d+`)
-				result[key] = re.ReplaceAllStringFunc(result[key], func(s string) string {
-					if i, err := strconv.Atoi(s[1:]); err == nil && i < len(matches) {
-						return matches[i]
-					}
-					return s
-				})
-			}
-		}
-		return result
-	}
-
-	re, err := getRegexp(pattern)
-	if err == nil {
-		matches := re.FindStringSubmatch(ua)
-		if len(matches) > 0 {
-			return processMatches(matches, output), true
-		}
-	}
-
-	re2, err := getRegexp2(pattern)
-	if err == nil {
-		matches, err := re2.FindStringMatch(ua)
-		if err == nil && matches != nil {
-			groups := make([]string, len(matches.Groups()))
-			for i, group := range matches.Groups() {
-				groups[i] = group.String()
-			}
-			return processMatches(groups, output), true
-		}
-	}
-
-	return nil, false
-}
-
-func parseUA(ua string, regexItems []regexItem) map[string]string {
-	for _, regItem := range regexItems {
-		for _, pattern := range regItem.patterns {
-			result, matched := applyPattern(ua, pattern, regItem.output)
-			if matched {
-				for _, mp := range regItem.mapperItems {
-					field := mp.field
-					mapperFn := mp.fn
-					if field != "" {
-						result[field] = mapperFn(result[field])
-					}
-				}
-				return result
-			}
-		}
-	}
-	return make(map[string]string)
-}
-
-func strip(pattern, str string) string {
-	re := regexp.MustCompile(pattern)
-	return re.ReplaceAllString(str, "")
-}
-
-type versionMap map[string][]string
-
-var windowsVersionMap = map[string][]string{
-	"ME":      {"4.90"},
-	"NT 3.11": {"NT3.51"},
-	"NT 4.0":  {"NT4.0"},
-	"2000":    {"NT 5.0"},
-	"XP":      {"NT 5.1", "NT 5.2"},
-	"Vista":   {"NT 6.0"},
-	"7":       {"NT 6.1"},
-	"8":       {"NT 6.2"},
-	"8.1":     {"NT 6.3"},
-	"10":      {"NT 6.4", "NT 10.0"},
-	"RT":      {"ARM"},
-}
-
-func strMapper(str string, m versionMap) string {
-	for key, valueList := range m {
-		for _, value := range valueList {
-			if strings.Contains(strings.ToLower(str), strings.ToLower(value)) {
-				return key
-			}
-		}
-	}
-	if value, ok := m["*"]; ok {
-		return value[0]
-	}
-	return str
-}
 
 type mapperItem struct {
 	field string
@@ -641,7 +491,7 @@ var regexMap = map[string][]regexItem{
 			mapperItems: []mapperItem{
 				{
 					field: Version,
-					fn:    func(s string) string { return strip(`[^\d\.]+.`, s) },
+					fn:    func(s string) string { return NonNumericSequenceReg.ReplaceAllString(s, "") },
 				},
 			},
 		},
@@ -720,7 +570,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Samsung,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -749,7 +599,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Apple,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -774,7 +624,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Honor,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -791,7 +641,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Huawei,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -811,7 +661,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Xiaomi,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -845,7 +695,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "$2",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 			mapperItems: []mapperItem{
 				{
@@ -893,7 +743,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Motorola,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		// LG
@@ -902,7 +752,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: LG,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -924,7 +774,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Lenovo,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		// Nokia
@@ -933,7 +783,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -958,7 +808,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Google,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -983,7 +833,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "Xperia Tablet",
 				Vendor: Sony,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		// OnePlus
@@ -1001,7 +851,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Amazon,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1018,7 +868,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "$2",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1035,7 +885,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: ASUS,
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1052,7 +902,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "HTC",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1078,7 +928,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "TCL",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1100,7 +950,7 @@ var regexMap = map[string][]regexItem{
 			mapperItems: []mapperItem{
 				{
 					field: Vendor,
-					fn:    lowerize,
+					fn:    strings.ToLower,
 				},
 				{
 					field: Type,
@@ -1116,7 +966,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Acer",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		// Meizu
@@ -1179,7 +1029,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1203,7 +1053,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1211,7 +1061,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Microsoft",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1227,7 +1077,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Nvidia",
-				Type:   "Tablet",
+				Type:   "tablet",
 			},
 		},
 		{
@@ -1916,7 +1766,7 @@ var regexMap = map[string][]regexItem{
 				`(?i)(mint)[\/\(\) ]?(\w*)`,
 				`(?i)(mageia|vectorlinux)[; ]`,
 				`(?i)([kxln]?ubuntu|debian|suse|opensuse|gentoo|arch(?= linux)|slackware|fedora|mandriva|centos|pclinuxos|red ?hat|zenwalk|linpus|raspbian|plan 9|minix|risc os|contiki|deepin|manjaro|elementary os|sabayon|linspire)(?: gnu\/linux)?(?: enterprise)?(?:[- ]linux)?(?:-gnu)?[-\/ ]?(?!chrom|package)([-\w\.]*)`,
-				`(?i)(hurd|linux) ?([\w\.]*)`,
+				`(?i)(hurd|linux)(?: arm\w*| x86\w*| ?)([\w\.]*)`,
 				`(?i)(gnu) ?([\w\.]*)`,
 				`(?i)\b([-frentopcghs]{0,5}bsd|dragonfly)[\/ ]?(?!amd|[ix346]{1,2}86)([\w\.]*)`,
 				`(?i)(haiku) (\w+)`,
@@ -1948,10 +1798,214 @@ var regexMap = map[string][]regexItem{
 	},
 }
 
+type versionMap map[string][]string
+
+var windowsVersionMap = map[string][]string{
+	"ME":      {"4.90"},
+	"NT 3.11": {"NT3.51"},
+	"NT 4.0":  {"NT4.0"},
+	"2000":    {"NT 5.0"},
+	"XP":      {"NT 5.1", "NT 5.2"},
+	"Vista":   {"NT 6.0"},
+	"7":       {"NT 6.1"},
+	"8":       {"NT 6.2"},
+	"8.1":     {"NT 6.3"},
+	"10":      {"NT 6.4", "NT 10.0"},
+	"RT":      {"ARM"},
+}
+
+func strMapper(str string, m versionMap) string {
+	for key, valueList := range m {
+		for _, value := range valueList {
+			if strings.Contains(strings.ToLower(str), strings.ToLower(value)) {
+				return key
+			}
+		}
+	}
+	if value, ok := m["*"]; ok {
+		return value[0]
+	}
+	return str
+}
+
+func majorize(version string) string {
+	return strings.Split(NonNumericOrDotReg.ReplaceAllString(version, ""), ".")[0]
+}
+
+var (
+	extractNumberReg      = regexp.MustCompile(`\d+`)
+	dollarReplaceReg      = regexp.MustCompile(`\$\d+`)
+	notBrandReg           = regexp.MustCompile(`(?i)not.a.brand`)
+	NonNumericOrDotReg    = regexp.MustCompile(`[^\d.]`)
+	NonNumericSequenceReg = regexp.MustCompile(`[^\d.]+.`)
+)
+
+var (
+	reCache  sync.Map
+	re2Cache sync.Map
+)
+
+func getCachedRegexp2(pattern string) (*regexp2.Regexp, error) {
+	if re, exists := re2Cache.Load(pattern); exists {
+		return re.(*regexp2.Regexp), nil
+	}
+	re := regexp2.MustCompile(pattern, 0)
+	re2Cache.Store(pattern, re)
+	return re, nil
+}
+
+func getCachedRegexp(pattern string) (*regexp.Regexp, error) {
+	if re, exists := reCache.Load(pattern); exists {
+		return re.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	reCache.Store(pattern, re)
+	return re, nil
+}
+
+func deepCopyMap(original map[string]string) map[string]string {
+	c := make(map[string]string, len(original))
+	for key, value := range original {
+		c[key] = value
+	}
+	return c
+}
+
+func extractIndex(value string) (int, error) {
+	if idx := strings.Index(value, "$"); idx != -1 {
+		if match := extractNumberReg.FindString(value[idx:]); match != "" {
+			return strconv.Atoi(match)
+		}
+		return 0, fmt.Errorf("no number found after $")
+	}
+	return 0, nil
+}
+
+func applyPattern(ua string, pattern string, output map[string]string) (map[string]string, bool) {
+	processMatches := func(matches []string, output map[string]string) map[string]string {
+		result := deepCopyMap(output)
+		for key, value := range output {
+			if idx, err := extractIndex(value); err == nil && idx > 0 && idx < len(matches) {
+				result[key] = dollarReplaceReg.ReplaceAllStringFunc(result[key], func(s string) string {
+					if i, err := strconv.Atoi(s[1:]); err == nil && i < len(matches) {
+						return matches[i]
+					}
+					return s
+				})
+			}
+		}
+		return result
+	}
+
+	// Attempt to get the regex from cache
+	re, err := getCachedRegexp(pattern)
+	if err == nil {
+		matches := re.FindStringSubmatch(ua)
+		if len(matches) > 0 {
+			return processMatches(matches, output), true
+		}
+	}
+
+	// Fallback to regex2 cache and matching
+	re2, err := getCachedRegexp2(pattern)
+	if err == nil {
+		matches, err := re2.FindStringMatch(ua)
+		if err == nil && matches != nil {
+			groups := make([]string, len(matches.Groups()))
+			for i, group := range matches.Groups() {
+				groups[i] = group.String()
+			}
+			return processMatches(groups, output), true
+		}
+	}
+
+	return nil, false
+}
+
+func parseUA(ua string, regexItems []regexItem) map[string]string {
+	for _, regItem := range regexItems {
+		for _, pattern := range regItem.patterns {
+			result, matched := applyPattern(ua, pattern, regItem.output)
+			if matched {
+				// Apply mapping functions
+				for _, mp := range regItem.mapperItems {
+					if mp.field != "" {
+						result[mp.field] = mp.fn(result[mp.field])
+					}
+				}
+				return result
+			}
+		}
+	}
+	return make(map[string]string)
+}
+
+// ClientHints User Agent Client Hints data
+type ClientHints struct {
+	brands       []IBrand
+	fullVerList  []IBrand
+	mobile       bool
+	model        string
+	platform     string
+	platformVer  string
+	architecture string
+	bitness      string
+}
+
+func NewClientHints(headers map[string]string) ClientHints {
+
+	for k, v := range headers {
+		headers[strings.ToLower(k)] = v
+	}
+
+	stripQuotes := func(str string) string {
+		return strings.ReplaceAll(str, "\"", "")
+	}
+
+	itemListToArray := func(header string) []IBrand {
+		if header == "" {
+			return nil
+		}
+		var arr []IBrand
+
+		tokens := strings.Split(regexp.MustCompile(`\\?"`).ReplaceAllString(header, ""), ",")
+		for _, token := range tokens {
+			if strings.Contains(token, ";") {
+				parts := strings.Split(strings.Trim(token, " "), ";v=")
+				arr = append(arr, IBrand{
+					Name:    parts[0],
+					Version: parts[1],
+				})
+			} else {
+				arr = append(arr, IBrand{
+					Name: strings.TrimSpace(token),
+				})
+			}
+		}
+		return arr
+	}
+
+	mobile, _ := regexp.MatchString(`\?1`, headers[CHHeaderMobile])
+
+	return ClientHints{
+		brands:       itemListToArray(headers[CHHeader]),
+		fullVerList:  itemListToArray(headers[CHHeaderFullVerList]),
+		mobile:       mobile,
+		model:        stripQuotes(headers[CHHeaderModel]),
+		platform:     stripQuotes(headers[CHHeaderPlatform]),
+		platformVer:  stripQuotes(headers[CHHeaderPlatformVer]),
+		architecture: stripQuotes(headers[CHHeaderArch]),
+		bitness:      stripQuotes(headers[CHHeaderBitness]),
+	}
+}
+
 type UAItem struct {
 	itemType string // browser, engine, os, device, cpu.
 	ua       string
-	uaCH     ClientHints // client hints
+	uaCH     ClientHints
 	rgxMap   map[string][]regexItem
 	data     map[string]string // ua 解析结果
 }
@@ -1971,27 +2025,41 @@ func (item *UAItem) parseCH() *UAItem {
 	rgxMap := item.rgxMap
 
 	switch item.itemType {
-	case UABrowser:
-		var brands []IBrand
-		if uaCh.fullVerList != nil {
-			brands = uaCh.fullVerList
-		} else {
+	case UABrowser, UAEngine:
+		brands := uaCh.fullVerList
+		if brands == nil {
 			brands = uaCh.brands
 		}
 		var prevName string
-		if brands != nil {
-			for _, brand := range brands {
-				brandName := strip("(Google|Microsoft) ", brand.Name)
-				brandVersion := brand.Version
-				if !regexp.MustCompile("not.a.brand").MatchString(strings.ToLower(brandName)) &&
-					(prevName == "" ||
-						(strings.Contains(strings.ToLower(prevName), "chrom") &&
-							!strings.Contains(strings.ToLower(brandName), "chromi"))) {
-					item.data[Name] = brandName
-					item.data[Version] = brandVersion
-					item.data[Major] = majorize(brandVersion)
-					prevName = brandName
-				}
+		for _, brand := range brands {
+			brandName := brand.Name
+			brandVersion := brand.Version
+			// Mapping brands for more readable names
+			mappedName := strMapper(brandName, versionMap{
+				"Chrome":          {"Google Chrome"},
+				"Edge":            {"Microsoft Edge"},
+				"Chrome WebView":  {"Android WebView"},
+				"Chrome Headless": {"HeadlessChrome"},
+				"Huawei Browser":  {"HuaweiBrowser"},
+				"MIUI Browser":    {"Miui Browser"},
+				"Opera Mobi":      {"OperaMobile"},
+				"Yandex":          {"YaBrowser"},
+			})
+
+			if mappedName != "" {
+				brandName = mappedName
+			}
+
+			if item.itemType == UABrowser && !notBrandReg.MatchString(brandName) &&
+				(prevName == "" || (strings.Contains(strings.ToLower(prevName), "chrom") && brandName != "Chromium")) {
+				item.data[Name] = brandName
+				item.data[Version] = brandVersion
+				item.data[Major] = majorize(brandVersion)
+				prevName = brandName
+			}
+
+			if item.itemType == UAEngine && brandName == "Chromium" {
+				item.data[Version] = brandVersion
 			}
 		}
 	case UACpu:
@@ -2000,19 +2068,25 @@ func (item *UAItem) parseCH() *UAItem {
 			if uaCh.bitness == "64" {
 				archName += "64"
 			}
-			// 需要使用rgxMap进行映射 x8664; -> amd
-			item.data = parseUA(archName, rgxMap[item.itemType])
+			item.data = parseUA(archName+";", rgxMap[item.itemType])
 		}
+
 	case UADevice:
 		if uaCh.mobile {
 			item.data[Type] = Mobile
 		}
 		if uaCh.model != "" {
 			item.data[Model] = uaCh.model
-		}
-		if uaCh.model == "Xbox" {
-			item.data[Type] = Console
-			item.data[Vendor] = Microsoft
+			if item.data[Type] == "" || item.data[Vendor] == "" {
+				reParse := map[string]string{}
+				reParse = parseUA("droid 9; "+uaCh.model+")", rgxMap[item.itemType])
+				if item.data[Type] == "" && reParse["type"] != "" {
+					item.data[Type] = reParse["type"]
+				}
+				if item.data[Vendor] == "" && reParse["vendor"] != "" {
+					item.data[Vendor] = reParse["vendor"]
+				}
+			}
 		}
 	case UAOS:
 		osName := uaCh.platform
@@ -2029,6 +2103,8 @@ func (item *UAItem) parseCH() *UAItem {
 			item.data[Name] = osName
 			item.data[Version] = osVersion
 		}
+
+		// Xbox-Specific Detection
 		if item.data[Name] == Windows && uaCh.model == "Xbox" {
 			item.data[Name] = "Xbox"
 			item.data[Version] = ""
@@ -2067,13 +2143,6 @@ func NewUAParser(ua string, headers map[string]string, extension map[string][]ma
 		withCh = true
 	}
 
-	// 将 headers 中所有的 key 转换为小写
-	for key, value := range headers {
-		headers[strings.ToLower(key)] = value
-		delete(headers, key)
-	}
-
-	// 将 extension 和 regexMap 合并
 	for key, value := range extension {
 		regexMap[key] = append(regexMap[key], regexItem{mapperItems: value})
 	}
@@ -2140,6 +2209,7 @@ func (p *UAParser) Os() IOs {
 
 func (p *UAParser) Result() IResult {
 	return IResult{
+		UA:      p.ua,
 		Browser: p.Browser(),
 		Engine:  p.Engine(),
 		Os:      p.Os(),
