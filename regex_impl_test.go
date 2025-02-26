@@ -58,30 +58,28 @@ func loadJsonFile(path string) []TestCase {
 	return tests
 }
 
-func TestUAParser_Result(t *testing.T) {
-	// Helper function to check for undefined values
-	isUndefined := func(val string) bool {
-		return val == "undefined"
-	}
+// Helper function to check for undefined values
+func isUndefined(val string) bool {
+	return val == "undefined"
+}
 
-	// Helper function to handle reflection and comparison
-	compareField := func(field reflect.Value, key, expectedValue string, label string, ua string) bool {
-		if field.Kind() == reflect.Struct {
-			fieldName := strings.Title(key)
-			actualVal := field.FieldByName(fieldName)
-			if actualVal.IsValid() && actualVal.Kind() == reflect.String {
-				actual := actualVal.String()
-				if strings.ToLower(actual) != strings.ToLower(expectedValue) {
-					t.Errorf("\033[35m%s\u001B[0m, [%s] \033[34mkey: %s\033[0m, \033[32mexpect: %s\033[0m, \033[33mactual: %s\033[0m",
-						label, ua, key, expectedValue, actual)
-					return false
-				}
+// Helper function to handle reflection and comparison
+func compareField(field reflect.Value, key, expectedValue string, label string, ua string) error {
+	if field.Kind() == reflect.Struct {
+		fieldName := strings.Title(key)
+		actualVal := field.FieldByName(fieldName)
+		if actualVal.IsValid() && actualVal.Kind() == reflect.String {
+			actual := actualVal.String()
+			if strings.ToLower(actual) != strings.ToLower(expectedValue) {
+				return fmt.Errorf("\033[35m%s\u001B[0m, [%s] \033[34mkey: %s\033[0m, \033[32mexpect: %s\033[0m, \033[33mactual: %s\033[0m",
+					label, ua, key, expectedValue, actual)
 			}
 		}
-		return true
 	}
+	return nil
+}
 
-	// Test cases with their respective JSON file paths
+func TestUAParser_Result(t *testing.T) {
 	alltestcases := []struct {
 		label string
 		list  []TestCase
@@ -124,8 +122,8 @@ func TestUAParser_Result(t *testing.T) {
 				}
 
 				// Compare the expected value with the actual parsed value
-				if !compareField(field, key, val, singleCase.label, tc.Ua) {
-					break
+				if err := compareField(field, key, val, singleCase.label, tc.Ua); err != nil {
+					t.Error(err.Error())
 				}
 			}
 		}

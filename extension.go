@@ -7,7 +7,7 @@ var (
 		"browser": {
 			{
 				// wget / curl / Lynx / ELinks / HTTPie
-				patterns: []string{`(?i)(wget|curl|lynx|elinks|httpie)[\\/ ]\\(?([\\w\\.-]+)`},
+				patterns: []string{`(?i)(wget|curl|lynx|elinks|httpie)[\/ ]\(?([\w\.-]+)`},
 				output: map[string]string{
 					Name:    "$1",
 					Version: "$2",
@@ -416,7 +416,7 @@ var (
 		"browser": {
 			{
 				// Evolution, Kontact/KMail, [Microsoft/Mac] Outlook, Thunderbird
-				patterns: []string{`(?i)(airmail|bluemail|emclient|evolution|foxmail|kmail2?|kontact|(?:microsoft |mac)?outlook(?:-express)?|navermailapp|(?!chrom.+)sparrow|thunderbird|yahoo)(?:m.+ail; |[\\/ ])([\\w\\.]+)`},
+				patterns: []string{`(?i)(airmail|bluemail|emclient|evolution|foxmail|kmail2?|kontact|(?:microsoft |mac)?outlook(?:-express)?|navermailapp|(?!chrom.+)sparrow|thunderbird|yahoo)(?:m.+ail; |[\/ ])([\w\.]+)`},
 				output: map[string]string{
 					Name:    "$1",
 					Version: "$2",
@@ -682,7 +682,8 @@ var (
 		"browser": {
 			{
 				// Apache-HttpClient/Axios/go-http-client/got/GuzzleHttp/Java[-HttpClient]/jsdom/libwww-perl/lua-resty-http/Needle/node-fetch/OkHttp/PHP-SOAP/PostmanRuntime/python-urllib/python-requests/Scrapy/superagent
-				patterns: []string{`(?i)^(apache-httpclient|axios|(?:go|java)-http-client|got|guzzlehttp|java|libwww-perl|lua-resty-http|needle|node-(?:fetch|superagent)|okhttp|php-soap|postmanruntime|python-(?:urllib|requests)|scrapy)\/([\w\.]+)`, `(?i)(jsdom|(?<=\()java)\/([\w\.]+)`},
+				patterns: []string{`(?i)^(apache-httpclient|axios|(?:go|java)-http-client|got|guzzlehttp|java|libwww-perl|lua-resty-http|needle|node-(?:fetch|superagent)|okhttp|php-soap|postmanruntime|python-(?:urllib|requests)|scrapy)\/([\w\.]+)`,
+					`(?i)(jsdom|(?<=\()java)\/([\w\.]+)`},
 				output: map[string]string{
 					Name:    "$1",
 					Version: "$2",

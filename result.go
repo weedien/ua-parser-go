@@ -9,6 +9,7 @@ type IBrowser struct {
 	Name    string `json:"name,omitempty"`
 	Version string `json:"version,omitempty"`
 	Major   string `json:"major,omitempty"`
+	Type    string `json:"type,omitempty"`
 }
 
 type ICpu struct {

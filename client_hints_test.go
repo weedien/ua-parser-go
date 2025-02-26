@@ -140,26 +140,26 @@ func TestMapUACHHeaders(t *testing.T) {
 		assert.Equal(t, false, uap.Device.Type == "tablet")
 	})
 
-	//t.Run("Can detect form-factors from client-hints", func(t *testing.T) {
-	//	headersVR := map[string]string{
-	//		"sec-ch-ua-form-factors": "\"VR\"",
-	//	}
-	//	headersEInk := map[string]string{
-	//		"sec-ch-ua-form-factors": "\"Tablet\", \"EInk\"",
-	//	}
-	//	headersUnknown := map[string]string{
-	//		"sec-ch-ua-form-factors": "\"Unknown\"",
-	//	}
-	//
-	//	uapVR := NewUAParser("", headersVR, nil).Result()
-	//	assert.Equal(t, "xr", uapVR.Device.Type)
-	//
-	//	uapEInk := NewUAParser("", headersEInk, nil).Result()
-	//	assert.Equal(t, "tablet", uapEInk.Device.Type)
-	//
-	//	uapUnknown := NewUAParser("", headersUnknown, nil).Result()
-	//	assert.Equal(t, "", uapUnknown.Device.Type)
-	//})
+	t.Run("Can detect form-factors from client-hints", func(t *testing.T) {
+		headersVR := map[string]string{
+			"sec-ch-ua-form-factors": "\"VR\"",
+		}
+		headersEInk := map[string]string{
+			"sec-ch-ua-form-factors": "\"Tablet\", \"EInk\"",
+		}
+		headersUnknown := map[string]string{
+			"sec-ch-ua-form-factors": "\"Unknown\"",
+		}
+
+		uapVR := NewUAParser("", headersVR, nil).Result()
+		assert.Equal(t, "xr", uapVR.Device.Type)
+
+		uapEInk := NewUAParser("", headersEInk, nil).Result()
+		assert.Equal(t, "tablet", uapEInk.Device.Type)
+
+		uapUnknown := NewUAParser("", headersUnknown, nil).Result()
+		assert.Equal(t, "", uapUnknown.Device.Type)
+	})
 
 	t.Run("Avoid error on headers variation", func(t *testing.T) {
 		headers = map[string]string{

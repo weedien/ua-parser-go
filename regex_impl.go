@@ -1814,6 +1814,17 @@ var windowsVersionMap = map[string][]string{
 	"RT":      {"ARM"},
 }
 
+var formFactorsMap = map[string][]string{
+	"embedded": {"Automotive"},
+	"mobile":   {"Mobile"},
+	"tablet":   {"Tablet", "EInk"},
+	"smarttv":  {"TV"},
+	"wearable": {"Watch"},
+	"xr":       {"VR", "XR"},
+	"":         {"Desktop", "Unknown"},
+	"*":        {},
+}
+
 func strMapper(str string, m versionMap) string {
 	for key, valueList := range m {
 		for _, value := range valueList {
@@ -1838,6 +1849,7 @@ var (
 	notBrandReg           = regexp.MustCompile(`(?i)not.a.brand`)
 	NonNumericOrDotReg    = regexp.MustCompile(`[^\d.]`)
 	NonNumericSequenceReg = regexp.MustCompile(`[^\d.]+.`)
+	quoteReplaceReg       = regexp.MustCompile(`\\?"`)
 )
 
 var (
@@ -1951,6 +1963,7 @@ type ClientHints struct {
 	model        string
 	platform     string
 	platformVer  string
+	formFactors  []string
 	architecture string
 	bitness      string
 }
@@ -1971,7 +1984,7 @@ func NewClientHints(headers map[string]string) ClientHints {
 		}
 		var arr []IBrand
 
-		tokens := strings.Split(regexp.MustCompile(`\\?"`).ReplaceAllString(header, ""), ",")
+		tokens := strings.Split(quoteReplaceReg.ReplaceAllString(header, ""), ",")
 		for _, token := range tokens {
 			if strings.Contains(token, ";") {
 				parts := strings.Split(strings.Trim(token, " "), ";v=")
@@ -1988,6 +2001,19 @@ func NewClientHints(headers map[string]string) ClientHints {
 		return arr
 	}
 
+	itemListToArray2 := func(header string) []string {
+		if header == "" {
+			return nil
+		}
+		var arr []string
+
+		tokens := strings.Split(quoteReplaceReg.ReplaceAllString(header, ""), ",")
+		for _, token := range tokens {
+			arr = append(arr, strings.TrimSpace(token))
+		}
+		return arr
+	}
+
 	mobile, _ := regexp.MatchString(`\?1`, headers[CHHeaderMobile])
 
 	return ClientHints{
@@ -1997,6 +2023,7 @@ func NewClientHints(headers map[string]string) ClientHints {
 		model:        stripQuotes(headers[CHHeaderModel]),
 		platform:     stripQuotes(headers[CHHeaderPlatform]),
 		platformVer:  stripQuotes(headers[CHHeaderPlatformVer]),
+		formFactors:  itemListToArray2(headers[CHHeaderFormFactors]),
 		architecture: stripQuotes(headers[CHHeaderArch]),
 		bitness:      stripQuotes(headers[CHHeaderBitness]),
 	}
@@ -2088,6 +2115,16 @@ func (item *UAItem) parseCH() *UAItem {
 				}
 			}
 		}
+		if len(item.uaCH.formFactors) > 0 {
+			var ff string
+			for _, formFactor := range item.uaCH.formFactors {
+				ff = strMapper(formFactor, formFactorsMap)
+				if ff != "" {
+					break
+				}
+			}
+			item.data[Type] = ff
+		}
 	case UAOS:
 		osName := uaCh.platform
 		if osName != "" {
@@ -2136,23 +2173,38 @@ type UAParser struct {
 	regexMap map[string][]regexItem
 }
 
-func NewUAParser(ua string, headers map[string]string, extension map[string][]mapperItem) *UAParser {
+func NewUAParser(ua string, headers map[string]string, extensions map[string][]regexItem) *UAParser {
 
 	withCh := false
 	if headers != nil {
 		withCh = true
 	}
 
-	for key, value := range extension {
-		regexMap[key] = append(regexMap[key], regexItem{mapperItems: value})
+	mergedMap := make(map[string][]regexItem)
+	if extensions != nil && len(extensions) > 0 {
+		for key, value := range regexMap {
+			if extValue, exists := extensions[key]; exists {
+				extensions[key] = append(extValue, value...)
+			} else {
+				extensions[key] = value
+			}
+		}
+		mergedMap = extensions
+	} else {
+		mergedMap = regexMap
 	}
 
 	return &UAParser{
 		ua:       ua,
 		withCH:   withCh,
 		httpUACH: NewClientHints(headers),
-		regexMap: regexMap,
+		regexMap: mergedMap,
 	}
+}
+
+func (p *UAParser) SetUA(ua string) *UAParser {
+	p.ua = ua
+	return p
 }
 
 func (p *UAParser) getData(itemType string) map[string]string {
@@ -2172,6 +2224,7 @@ func (p *UAParser) Browser() IBrowser {
 		Name:    data[Name],
 		Version: data[Version],
 		Major:   data[Major],
+		Type:    data[Type],
 	}
 }
 

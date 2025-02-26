@@ -24,7 +24,7 @@ const (
 const (
 	Name         = "Name"
 	Version      = "Version"
-	Type         = "type"
+	Type         = "Type"
 	Architecture = "architecture"
 	Vendor       = "vendor"
 	Console      = "console"
