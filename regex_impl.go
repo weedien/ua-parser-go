@@ -1872,15 +1872,6 @@ var (
 	re2Cache sync.Map
 )
 
-func getCachedRegexp2(pattern string) (*regexp2.Regexp, error) {
-	if re, exists := re2Cache.Load(pattern); exists {
-		return re.(*regexp2.Regexp), nil
-	}
-	re := regexp2.MustCompile(pattern, 0)
-	re2Cache.Store(pattern, re)
-	return re, nil
-}
-
 func getCachedRegexp(pattern string) (*regexp.Regexp, error) {
 	if re, exists := reCache.Load(pattern); exists {
 		return re.(*regexp.Regexp), nil
@@ -1890,6 +1881,15 @@ func getCachedRegexp(pattern string) (*regexp.Regexp, error) {
 		return nil, err
 	}
 	reCache.Store(pattern, re)
+	return re, nil
+}
+
+func getCachedRegexp2(pattern string) (*regexp2.Regexp, error) {
+	if re, exists := re2Cache.Load(pattern); exists {
+		return re.(*regexp2.Regexp), nil
+	}
+	re := regexp2.MustCompile(pattern, 0)
+	re2Cache.Store(pattern, re)
 	return re, nil
 }
 
