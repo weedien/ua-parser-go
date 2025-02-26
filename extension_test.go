@@ -13,9 +13,9 @@ func TestMergeExtension(t *testing.T) {
 	crawlersAndCLIs := map[string][]regexItem{
 		"browser": append(Crawlers["browser"], CLIs["browser"]...),
 	}
-	crawlersAndCLIsParser := NewUAParser("", nil, crawlersAndCLIs)
-	assert.Equal(t, IBrowser{Name: "Wget", Version: "1.21.1", Major: "1", Type: "cli"}, crawlersAndCLIsParser.SetUA(wget).Browser())
-	assert.Equal(t, IBrowser{Name: "FacebookBot", Version: "1.0", Major: "1", Type: "crawler"}, crawlersAndCLIsParser.SetUA(facebookBot).Browser())
+	crawlersAndCLIsParser := NewUAParser("").WithExtensions(crawlersAndCLIs)
+	assert.Equal(t, IBrowser{Name: "Wget", Version: "1.21.1", Major: "1", Type: "cli"}, crawlersAndCLIsParser.WithUA(wget).Browser())
+	assert.Equal(t, IBrowser{Name: "FacebookBot", Version: "1.0", Major: "1", Type: "crawler"}, crawlersAndCLIsParser.WithUA(facebookBot).Browser())
 }
 
 func TestExtension(t *testing.T) {
@@ -53,7 +53,7 @@ func TestExtension(t *testing.T) {
 
 	for _, singleCase := range alltestcases {
 		for _, tc := range singleCase.list {
-			browser := NewUAParser(tc.Ua, nil, singleCase.extension).Browser()
+			browser := NewUAParser(tc.Ua).WithExtensions(singleCase.extension).Browser()
 			for key, val := range tc.Expect {
 				if isUndefined(val) {
 					continue
@@ -74,20 +74,20 @@ func TestExtension(t *testing.T) {
 	bluesky := "Mozilla/5.0 (compatible; Bluesky Cardyb/1.1; +mailto:support@bsky.app)"
 
 	// Test for Scrapy
-	parser := NewUAParser(scrapy, nil, Bots)
+	parser := NewUAParser(scrapy).WithExtensions(Bots)
 	assert.Equal(t, "Scrapy", parser.Browser().Name)
 
 	// Test for Emails
-	emailParser := NewUAParser("", nil, Emails)
-	assert.Equal(t, IBrowser{Name: "Microsoft Outlook", Version: "16.0.9126", Major: "16", Type: "email"}, emailParser.SetUA(outlook).Browser())
-	assert.Equal(t, IBrowser{Name: "Thunderbird", Version: "78.13.0", Major: "78", Type: "email"}, emailParser.SetUA(thunderbird).Browser())
+	emailParser := NewUAParser("").WithExtensions(Emails)
+	assert.Equal(t, IBrowser{Name: "Microsoft Outlook", Version: "16.0.9126", Major: "16", Type: "email"}, emailParser.WithUA(outlook).Browser())
+	assert.Equal(t, IBrowser{Name: "Thunderbird", Version: "78.13.0", Major: "78", Type: "email"}, emailParser.WithUA(thunderbird).Browser())
 
 	// Test for Libraries
-	libraryParser := NewUAParser("", nil, Libraries)
-	assert.Equal(t, IBrowser{Name: "axios", Version: "1.3.5", Major: "1", Type: "library"}, libraryParser.SetUA(axios).Browser())
-	assert.Equal(t, IBrowser{Name: "jsdom", Version: "20.0.3", Major: "20", Type: "library"}, libraryParser.SetUA(jsdom).Browser())
-	assert.Equal(t, IBrowser{Name: "Scrapy", Version: "1.5.0", Major: "1", Type: "library"}, libraryParser.SetUA(scrapy).Browser())
+	libraryParser := NewUAParser("").WithExtensions(Libraries)
+	assert.Equal(t, IBrowser{Name: "axios", Version: "1.3.5", Major: "1", Type: "library"}, libraryParser.WithUA(axios).Browser())
+	assert.Equal(t, IBrowser{Name: "jsdom", Version: "20.0.3", Major: "20", Type: "library"}, libraryParser.WithUA(jsdom).Browser())
+	assert.Equal(t, IBrowser{Name: "Scrapy", Version: "1.5.0", Major: "1", Type: "library"}, libraryParser.WithUA(scrapy).Browser())
 
 	// Test for Bluesky
-	assert.Equal(t, IBrowser{Name: "Bluesky", Version: "1.1", Major: "1", Type: "fetcher"}, NewUAParser(bluesky, nil, Bots).Browser())
+	assert.Equal(t, IBrowser{Name: "Bluesky", Version: "1.1", Major: "1", Type: "fetcher"}, NewUAParser(bluesky).WithExtensions(Bots).Browser())
 }

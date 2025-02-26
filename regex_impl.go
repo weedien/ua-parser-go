@@ -3,10 +3,25 @@ package uaparser
 import (
 	"fmt"
 	"github.com/dlclark/regexp2"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+)
+
+const (
+	UAMinLength = 5
+	UAMaxLength = 500
+)
+
+var (
+	extractNumberReg      = regexp.MustCompile(`\d+`)
+	dollarReplaceReg      = regexp.MustCompile(`\$\d+`)
+	notBrandReg           = regexp.MustCompile(`(?i)not.a.brand`)
+	NonNumericOrDotReg    = regexp.MustCompile(`[^\d.]`)
+	NonNumericSequenceReg = regexp.MustCompile(`[^\d.]+.`)
+	quoteReplaceReg       = regexp.MustCompile(`\\?"`)
 )
 
 type mapperItem struct {
@@ -33,7 +48,7 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)edg(?:e|ios|a)?\/([\w\.]+)`},
 			output: map[string]string{
-				Name:    "Edge",
+				Name:    Edge,
 				Version: "$1",
 			},
 		},
@@ -51,21 +66,21 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)opios[\/ ]+([\w\.]+)`},
 			output: map[string]string{
-				Name:    "Opera Mini",
+				Name:    Opera + " Mini",
 				Version: "$1",
 			},
 		},
 		{
 			patterns: []string{`(?i)\bop(?:rg)?x\/([\w\.]+)`},
 			output: map[string]string{
-				Name:    "Opera GX",
+				Name:    Opera + " GX",
 				Version: "$1",
 			},
 		},
 		{
 			patterns: []string{`(?i)\bopr\/([\w\.]+)`},
 			output: map[string]string{
-				Name:    "Opera",
+				Name:    Opera,
 				Version: "$1",
 			},
 		},
@@ -73,7 +88,7 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)\bb[ai]*d(?:uhd|[ub]*[aekoprswx]{5,6})[\/ ]?([\w\.]+)`},
 			output: map[string]string{
-				Name:    "Baidu",
+				Name:    Baidu,
 				Version: "$1",
 			},
 		},
@@ -322,7 +337,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Name:    "$1",
 				Version: "$2",
-				Type:    "InApp",
+				Type:    InApp,
 			},
 		},
 		{
@@ -330,7 +345,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Name:    "GSA",
 				Version: "$1",
-				Type:    "InApp",
+				Type:    InApp,
 			},
 		},
 		{
@@ -338,14 +353,14 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Name:    "TikTok",
 				Version: "$1",
-				Type:    "InApp",
+				Type:    InApp,
 			},
 		},
 		{
 			patterns: []string{`(?i)\[(linkedin)app\]`},
 			output: map[string]string{
 				Name: "LinkedIn",
-				Type: "InApp",
+				Type: InApp,
 			},
 		},
 		{
@@ -570,7 +585,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Samsung,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -580,7 +595,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Samsung,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Apple
@@ -589,7 +604,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Apple,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
@@ -599,7 +614,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Apple,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -615,7 +630,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Sharp,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Honor
@@ -624,7 +639,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Honor,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -632,7 +647,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Honor,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Huawei
@@ -641,7 +656,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Huawei,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -651,7 +666,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Huawei,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Xiaomi
@@ -661,7 +676,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Xiaomi,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -676,7 +691,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Xiaomi,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// OPPO
@@ -687,7 +702,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: OPPO,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
@@ -695,13 +710,13 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "$2",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 			mapperItems: []mapperItem{
 				{
 					field: Vendor,
 					fn: func(s string) string {
-						return strMapper(s, versionMap{"OnePlus": {"304", "403", "203"}, "*": {OPPO}})
+						return strMapper(s, map[string][]string{"OnePlus": {"304", "403", "203"}, "*": {OPPO}})
 					},
 				},
 			},
@@ -714,7 +729,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Vivo",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Realme
@@ -723,7 +738,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Realme",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Motorola
@@ -735,7 +750,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Motorola,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
@@ -743,7 +758,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Motorola,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		// LG
@@ -752,7 +767,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: LG,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -763,7 +778,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: LG,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Lenovo
@@ -774,7 +789,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Lenovo,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		// Nokia
@@ -783,7 +798,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -793,7 +808,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Nokia",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 			mapperItems: []mapperItem{
 				{
@@ -808,7 +823,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Google,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -816,7 +831,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Google,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Sony
@@ -825,7 +840,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Sony,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
@@ -833,7 +848,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "Xperia Tablet",
 				Vendor: Sony,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		// OnePlus
@@ -842,7 +857,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "OnePlus",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Amazon
@@ -851,7 +866,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Amazon,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -859,7 +874,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "Fire Phone $1",
 				Vendor: Amazon,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// BlackBerry
@@ -868,7 +883,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "$2",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -876,7 +891,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Blackberry,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Asus
@@ -885,7 +900,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: ASUS,
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -893,7 +908,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: ASUS,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// HTC
@@ -902,7 +917,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "HTC",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -910,7 +925,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$2",
 				Vendor: "$1",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// ZTE
@@ -919,7 +934,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// TCL
@@ -928,7 +943,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "TCL",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -936,7 +951,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "TCL",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// itel
@@ -955,7 +970,7 @@ var regexMap = map[string][]regexItem{
 				{
 					field: Type,
 					fn: func(s string) string {
-						return strMapper(s, versionMap{"tablet": {"p10001l", "w7001"}, "*": {"mobile"}})
+						return strMapper(s, map[string][]string{Tablet: {"p10001l", "w7001"}, "*": {Mobile}})
 					},
 				},
 			},
@@ -966,7 +981,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Acer",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		// Meizu
@@ -975,7 +990,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Meizu",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Ulefone
@@ -984,7 +999,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Ulefone",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Energizer
@@ -993,7 +1008,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Energizer",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Cat
@@ -1002,7 +1017,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Cat",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Smartfren
@@ -1011,7 +1026,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Smartfren",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// Nothing
@@ -1020,7 +1035,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Nothing",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		// MIXED
@@ -1029,7 +1044,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -1045,7 +1060,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
@@ -1053,15 +1068,15 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
 			patterns: []string{`(?i)(surface duo)`},
 			output: map[string]string{
 				Model:  "$1",
-				Vendor: "Microsoft",
-				Type:   "tablet",
+				Vendor: Microsoft,
+				Type:   Tablet,
 			},
 		},
 		{
@@ -1069,7 +1084,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Fairphone",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
@@ -1077,7 +1092,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: "Nvidia",
-				Type:   "tablet",
+				Type:   Tablet,
 			},
 		},
 		{
@@ -1085,15 +1100,15 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Vendor: "$1",
 				Model:  "$2",
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 		{
 			patterns: []string{`(?i)(kin\.[onetw]{3})`},
 			output: map[string]string{
 				Model:  "$1",
-				Vendor: "Microsoft",
-				Type:   "mobile",
+				Vendor: Microsoft,
+				Type:   Mobile,
 			},
 		},
 		{
@@ -1101,7 +1116,7 @@ var regexMap = map[string][]regexItem{
 			output: map[string]string{
 				Model:  "$1",
 				Vendor: Zebra,
-				Type:   "mobile",
+				Type:   Mobile,
 			},
 		},
 
@@ -1142,7 +1157,7 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)crkey.*devicetype\/chromecast`},
 			output: map[string]string{
-				Model:  "Chromecast Third Generation",
+				Model:  Chromecast + " Third Generation",
 				Vendor: Google,
 				Type:   SmartTV,
 			},
@@ -1150,7 +1165,7 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)crkey.*devicetype\/([^/]*)`},
 			output: map[string]string{
-				Model:  "Chromecast $1",
+				Model:  Chromecast + " $1",
 				Vendor: Google,
 				Type:   SmartTV,
 			},
@@ -1158,7 +1173,7 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)fuchsia.*crkey`},
 			output: map[string]string{
-				Model:  "Chromecast Nest Hub",
+				Model:  Chromecast + " Nest Hub",
 				Vendor: Google,
 				Type:   SmartTV,
 			},
@@ -1290,7 +1305,7 @@ var regexMap = map[string][]regexItem{
 			patterns: []string{`(?i)\b(xbox(?: one)?(?!; xbox))[\); ]`},
 			output: map[string]string{
 				Model:  "$1",
-				Vendor: "Microsoft",
+				Vendor: Microsoft,
 				Type:   Console,
 			},
 		},
@@ -1456,7 +1471,7 @@ var regexMap = map[string][]regexItem{
 				{
 					field: Type,
 					fn: func(s string) string {
-						return strMapper(s, versionMap{"mobile": {"Mobile"}, "xr": {"VR"}, "*": {Tablet}})
+						return strMapper(s, map[string][]string{Mobile: {Mobile}, "xr": {"VR"}, "*": {Tablet}})
 					},
 				},
 			},
@@ -1569,7 +1584,7 @@ var regexMap = map[string][]regexItem{
 				`(?i)(?:win(?=3|9|n)|win 9x )([nt\d\.]+)`,
 			},
 			output: map[string]string{
-				Name:    "Windows",
+				Name:    Windows,
 				Version: "$1",
 			},
 			mapperItems: []mapperItem{
@@ -1623,28 +1638,28 @@ var regexMap = map[string][]regexItem{
 		{
 			patterns: []string{`(?i)android ([\d\.]+).*crkey`},
 			output: map[string]string{
-				Name:    "Chromecast Android",
+				Name:    Chromecast + " Android",
 				Version: "$1",
 			},
 		},
 		{
 			patterns: []string{`(?i)fuchsia.*crkey\/([\d\.]+)`},
 			output: map[string]string{
-				Name:    "Chromecast Fuchsia",
+				Name:    Chromecast + " Fuchsia",
 				Version: "$1",
 			},
 		},
 		{
 			patterns: []string{`(?i)crkey\/([\d\.]+).*devicetype\/smartspeaker`},
 			output: map[string]string{
-				Name:    "Chromecast SmartSpeaker",
+				Name:    Chromecast + " SmartSpeaker",
 				Version: "$1",
 			},
 		},
 		{
 			patterns: []string{`(?i)linux.*crkey\/([\d\.]+)`},
 			output: map[string]string{
-				Name:    "Chromecast Linux",
+				Name:    Chromecast + " Linux",
 				Version: "$1",
 			},
 		},
@@ -1798,8 +1813,6 @@ var regexMap = map[string][]regexItem{
 	},
 }
 
-type versionMap map[string][]string
-
 var windowsVersionMap = map[string][]string{
 	"ME":      {"4.90"},
 	"NT 3.11": {"NT3.51"},
@@ -1815,17 +1828,28 @@ var windowsVersionMap = map[string][]string{
 }
 
 var formFactorsMap = map[string][]string{
-	"embedded": {"Automotive"},
-	"mobile":   {"Mobile"},
-	"tablet":   {"Tablet", "EInk"},
-	"smarttv":  {"TV"},
-	"wearable": {"Watch"},
-	"xr":       {"VR", "XR"},
-	"":         {"Desktop", "Unknown"},
-	"*":        {},
+	Embedded: {"Automotive"},
+	Mobile:   {Mobile},
+	Tablet:   {Tablet, "EInk"},
+	SmartTV:  {"TV"},
+	Wearable: {"Watch"},
+	XR:       {"VR", "XR"},
+	"":       {"Desktop", "Unknown"},
+	"*":      {},
 }
 
-func strMapper(str string, m versionMap) string {
+var clientHintsBrowserMap = map[string][]string{
+	"Chrome":          {"Google Chrome"},
+	"Edge":            {"Microsoft Edge"},
+	"Chrome WebView":  {"Android WebView"},
+	"Chrome Headless": {"HeadlessChrome"},
+	"Huawei Browser":  {"HuaweiBrowser"},
+	"MIUI Browser":    {"Miui Browser"},
+	"Opera Mobi":      {"OperaMobile"},
+	"Yandex":          {"YaBrowser"},
+}
+
+func strMapper(str string, m map[string][]string) string {
 	for key, valueList := range m {
 		for _, value := range valueList {
 			if strings.Contains(strings.ToLower(str), strings.ToLower(value)) {
@@ -1842,15 +1866,6 @@ func strMapper(str string, m versionMap) string {
 func majorize(version string) string {
 	return strings.Split(NonNumericOrDotReg.ReplaceAllString(version, ""), ".")[0]
 }
-
-var (
-	extractNumberReg      = regexp.MustCompile(`\d+`)
-	dollarReplaceReg      = regexp.MustCompile(`\$\d+`)
-	notBrandReg           = regexp.MustCompile(`(?i)not.a.brand`)
-	NonNumericOrDotReg    = regexp.MustCompile(`[^\d.]`)
-	NonNumericSequenceReg = regexp.MustCompile(`[^\d.]+.`)
-	quoteReplaceReg       = regexp.MustCompile(`\\?"`)
-)
 
 var (
 	reCache  sync.Map
@@ -1970,10 +1985,6 @@ type ClientHints struct {
 
 func NewClientHints(headers map[string]string) ClientHints {
 
-	for k, v := range headers {
-		headers[strings.ToLower(k)] = v
-	}
-
 	stripQuotes := func(str string) string {
 		return strings.ReplaceAll(str, "\"", "")
 	}
@@ -2062,30 +2073,21 @@ func (item *UAItem) parseCH() *UAItem {
 			brandName := brand.Name
 			brandVersion := brand.Version
 			// Mapping brands for more readable names
-			mappedName := strMapper(brandName, versionMap{
-				"Chrome":          {"Google Chrome"},
-				"Edge":            {"Microsoft Edge"},
-				"Chrome WebView":  {"Android WebView"},
-				"Chrome Headless": {"HeadlessChrome"},
-				"Huawei Browser":  {"HuaweiBrowser"},
-				"MIUI Browser":    {"Miui Browser"},
-				"Opera Mobi":      {"OperaMobile"},
-				"Yandex":          {"YaBrowser"},
-			})
+			mappedName := strMapper(brandName, clientHintsBrowserMap)
 
 			if mappedName != "" {
 				brandName = mappedName
 			}
 
 			if item.itemType == UABrowser && !notBrandReg.MatchString(brandName) &&
-				(prevName == "" || (strings.Contains(strings.ToLower(prevName), "chrom") && brandName != "Chromium")) {
+				(prevName == "" || (strings.Contains(strings.ToLower(prevName), "chrom") && brandName != Chromium)) {
 				item.data[Name] = brandName
 				item.data[Version] = brandVersion
 				item.data[Major] = majorize(brandVersion)
 				prevName = brandName
 			}
 
-			if item.itemType == UAEngine && brandName == "Chromium" {
+			if item.itemType == UAEngine && brandName == Chromium {
 				item.data[Version] = brandVersion
 			}
 		}
@@ -2107,11 +2109,11 @@ func (item *UAItem) parseCH() *UAItem {
 			if item.data[Type] == "" || item.data[Vendor] == "" {
 				reParse := map[string]string{}
 				reParse = parseUA("droid 9; "+uaCh.model+")", rgxMap[item.itemType])
-				if item.data[Type] == "" && reParse["type"] != "" {
-					item.data[Type] = reParse["type"]
+				if item.data[Type] == "" && reParse[Type] != "" {
+					item.data[Type] = reParse[Type]
 				}
-				if item.data[Vendor] == "" && reParse["vendor"] != "" {
-					item.data[Vendor] = reParse["vendor"]
+				if item.data[Vendor] == "" && reParse[Vendor] != "" {
+					item.data[Vendor] = reParse[Vendor]
 				}
 			}
 		}
@@ -2142,8 +2144,8 @@ func (item *UAItem) parseCH() *UAItem {
 		}
 
 		// Xbox-Specific Detection
-		if item.data[Name] == Windows && uaCh.model == "Xbox" {
-			item.data[Name] = "Xbox"
+		if item.data[Name] == Windows && uaCh.model == Xbox {
+			item.data[Name] = Xbox
 			item.data[Version] = ""
 		}
 	}
@@ -2173,13 +2175,41 @@ type UAParser struct {
 	regexMap map[string][]regexItem
 }
 
-func NewUAParser(ua string, headers map[string]string, extensions map[string][]regexItem) *UAParser {
+func NewUAParser(ua string) *UAParser {
+	if len(ua) >= UAMaxLength {
+		ua = ""
+		slog.Warn("User-Agent string is too long, it will be ignored")
+	}
+	return &UAParser{
+		ua:       ua,
+		withCH:   false,
+		httpUACH: ClientHints{},
+		regexMap: regexMap,
+	}
+}
 
-	withCh := false
-	if headers != nil {
-		withCh = true
+func (p *UAParser) WithUA(ua string) *UAParser {
+	p.ua = ua
+	return p
+}
+
+func (p *UAParser) WithHeaders(headers map[string]string) *UAParser {
+	if len(headers) > 0 {
+		p.withCH = true
 	}
 
+	for k, v := range headers {
+		headers[strings.ToLower(k)] = v
+	}
+
+	p.httpUACH = NewClientHints(headers)
+	if ua, ok := headers[UserAgent]; ok && p.ua == "" && len(ua) <= UAMaxLength {
+		p.ua = ua
+	}
+	return p
+}
+
+func (p *UAParser) WithExtensions(extensions map[string][]regexItem) *UAParser {
 	mergedMap := make(map[string][]regexItem)
 	if extensions != nil && len(extensions) > 0 {
 		for key, value := range regexMap {
@@ -2193,21 +2223,15 @@ func NewUAParser(ua string, headers map[string]string, extensions map[string][]r
 	} else {
 		mergedMap = regexMap
 	}
-
-	return &UAParser{
-		ua:       ua,
-		withCH:   withCh,
-		httpUACH: NewClientHints(headers),
-		regexMap: mergedMap,
-	}
-}
-
-func (p *UAParser) SetUA(ua string) *UAParser {
-	p.ua = ua
+	p.regexMap = mergedMap
 	return p
 }
 
 func (p *UAParser) getData(itemType string) map[string]string {
+	if len(p.ua) < UAMinLength && !p.withCH {
+		return make(map[string]string)
+	}
+
 	uaItem := NewUAItem(itemType, p.ua, p.regexMap, p.httpUACH)
 	var data map[string]string
 	if p.withCH {
