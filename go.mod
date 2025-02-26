@@ -1,4 +1,4 @@
-module uaparser
+module github.com/weedien/ua-parser-go
 
 go 1.24.0
 
