@@ -80,6 +80,14 @@ func compareField(field reflect.Value, key, expectedValue string, label string, 
 	return nil
 }
 
+func TestUAParser_Single(t *testing.T) {
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132.0.0.0"
+
+	r := NewUAParser(ua).Result()
+	marshal, _ := json.Marshal(r)
+	t.Logf("result: %s", string(marshal))
+}
+
 func TestUAParser_Result(t *testing.T) {
 	alltestcases := []struct {
 		label string
@@ -184,7 +192,7 @@ func BenchmarkUAParser_Result(b *testing.B) {
 	}
 }
 
-// ~> 900μs/op
+// ~= 1000μs /op
 func BenchmarkUAParser_Single(b *testing.B) {
 	tc := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132.0.0.0"
 
@@ -249,7 +257,7 @@ func FuzzUAParser_Result(f *testing.F) {
 	})
 }
 
-func TestNewClientHints(t *testing.T) {
+func TestClientHints(t *testing.T) {
 	headers := map[string]string{
 		"Sec-Ch-Ua":                   "\"Microsoft Edge\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A IBrand\";v=\"24\"",
 		"Sec-Ch-Ua-Arch":              "\"x86\"",
@@ -264,7 +272,7 @@ func TestNewClientHints(t *testing.T) {
 	t.Logf("client hints: %+v", ch)
 }
 
-func BenchmarkNewClientHints(b *testing.B) {
+func BenchmarkClientHints(b *testing.B) {
 	for range b.N {
 		headers := map[string]string{
 			"Sec-Ch-Ua":                   "\"Microsoft Edge\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A IBrand\";v=\"24\"",
@@ -280,7 +288,7 @@ func BenchmarkNewClientHints(b *testing.B) {
 	}
 }
 
-func TestMapUACHHeaders(t *testing.T) {
+func TestMapCHHeaders(t *testing.T) {
 	headers := map[string]string{
 		"Sec-Ch-Ua":                   "\"Chromium\";v=\"93\", \"Google Chrome\";v=\"93\", \" Not;A Brand\";v=\"99\"",
 		"Sec-Ch-Ua-Arch":              "\"arm\"",
@@ -455,7 +463,7 @@ func TestMapUACHHeaders(t *testing.T) {
 	})
 }
 
-func TestUACHHeaders(t *testing.T) {
+func TestCHHeaders_Result(t *testing.T) {
 	type Headers map[string]string
 
 	type Expect struct {

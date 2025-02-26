@@ -18,7 +18,7 @@ func TestMergeExtension(t *testing.T) {
 	assert.Equal(t, IBrowser{Name: "FacebookBot", Version: "1.0", Major: "1", Type: "crawler"}, crawlersAndCLIsParser.WithUA(facebookBot).Browser())
 }
 
-func TestExtension(t *testing.T) {
+func TestExtension_Result(t *testing.T) {
 	alltestcases := []struct {
 		label     string
 		extension map[string][]regexItem
