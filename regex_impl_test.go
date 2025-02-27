@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -719,4 +720,30 @@ func TestIdentifyVendorAndTypeOfDeviceFromGivenModelName(t *testing.T) {
 		assert.Equal(t, test.Expect.Vendor, device.Vendor)
 		assert.Equal(t, test.Expect.Type, device.Type)
 	}
+}
+
+// heapDelta returns the delta in KB between
+// the current heap size and the previous heap size.
+func heapDelta(prev uint64) uint64 {
+	cur := getAlloc()
+	if cur < prev {
+		return 0
+	}
+	return cur - prev
+}
+
+// getAlloc returns the current heap size in KB.
+func getAlloc() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.Alloc / 1024
+}
+
+func TestMemoryUseWhenAllRegexLoaded(t *testing.T) {
+	heapSize := getAlloc()
+
+	parser := NewUAParser("000000000000000000000000000000000000000").WithExtensions(Bots)
+	_ = parser.Result()
+
+	t.Logf("Memory use: %d KB", heapDelta(heapSize)) // < 2.5MB
 }
